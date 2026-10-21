@@ -150,3 +150,23 @@ export interface AnalysisTurn {
 export interface AnalysisContext {
   turns?: AnalysisTurn[];
 }
+
+/** The steps an AI-direct task goes through on the way to delivery. */
+export type FulfillmentStage = "build" | "check" | "fix";
+
+export interface Deliverable {
+  title: string;
+  /** Markdown. */
+  content: string;
+  /** What the quality check found, and whether it was fixed. */
+  checks: {
+    passed: boolean;
+    notes: string[];
+  };
+}
+
+/** One line of the streamed /api/fulfill response. */
+export type FulfillmentEvent =
+  | { type: "stage"; stage: FulfillmentStage }
+  | { type: "done"; deliverable: Deliverable }
+  | { type: "error"; message: string };

@@ -16,6 +16,8 @@ import {
 import { StructuredPlan } from "@/components/request/StructuredPlan";
 import { RobotAvatar } from "@/components/request/RobotAvatar";
 import { TypingText } from "@/components/request/TypingText";
+import { DeliverablePanel } from "@/components/request/DeliverablePanel";
+import { useFulfillment } from "@/hooks/useFulfillment";
 import { cn } from "@/lib/utils";
 
 interface RequestModalProps {
@@ -88,6 +90,10 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
   const [error, setError] = useState<string | null>(null);
   // The newest AI reply types itself out; older ones render instantly.
   const [typingId, setTypingId] = useState<string | null>(null);
+  // AI-direct requests are built right here; the right panel can show the result.
+  const fulfillment = useFulfillment();
+  const [view, setView] = useState<"plan" | "deliverable">("plan");
+  const lastRunRef = useRef<{ feedback?: string } | null>(null);
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -125,6 +131,9 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
       // Small talk gets a reply but leaves the current plan untouched.
       const isRequest = analysis.isRequest !== false;
       if (isRequest) {
+        fulfillment.reset();
+        setView("plan");
+        setIsSubmitted(false);
         setCurrentAnalysis(analysis);
         setSelectedRouteId(
           analysis.recommendedRouteId || analysis.fulfillmentRoutes[0]?.id || ""
@@ -150,6 +159,8 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
     } finally {
       setIsAnalyzing(false);
     }
+    // fulfillment.reset is stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Initial request coming from an example or the nav button.
@@ -220,10 +231,58 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
     };
   }, [isOpen, onClose]);
 
+  const addAssistantMessage = (content: string) => {
+    const id = `ai-${Date.now()}`;
+    setTypingId(id);
+    setMessages((previous) => [
+      ...previous,
+      { id, role: "assistant", content, timestamp: stamp() },
+    ]);
+  };
+
+  const runBuild = async (feedback?: string) => {
+    if (!currentAnalysis) return;
+    lastRunRef.current = { feedback };
+    setView("deliverable");
+
+    const previous = fulfillment.deliverable?.content;
+    const result = await fulfillment.run(
+      currentAnalysis,
+      toTurns(messages),
+      feedback && previous ? { previous, feedback } : undefined
+    );
+
+    if (result) {
+      addAssistantMessage(
+        feedback
+          ? "Updated. Have a look on the right, and tell me if anything else should change."
+          : `Done! "${result.title}" is ready on the right. I checked it against your request. Copy or download it, or tell me what to change.`
+      );
+    }
+  };
+
+  const handleRevise = (feedback: string) => {
+    if (fulfillment.status === "working") return;
+    setMessages((previous) => [
+      ...previous,
+      { id: `user-${Date.now()}`, role: "user", content: feedback, timestamp: stamp() },
+    ]);
+    addAssistantMessage("Got it, updating it now.");
+    void runBuild(feedback);
+  };
+
   const handleSend = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = inputVal.trim();
     if (!trimmed || isAnalyzing) return;
+
+    // While a finished result is open, the chat box asks for changes to it.
+    if (view === "deliverable" && fulfillment.deliverable) {
+      if (fulfillment.status === "working") return;
+      setInputVal("");
+      handleRevise(trimmed);
+      return;
+    }
 
     setMessages((previous) => [
       ...previous,
@@ -239,6 +298,13 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
   };
 
   const handleApprovePlan = () => {
+    if (currentAnalysis?.fulfillmentMethod === "ai_direct") {
+      setIsSubmitted(true);
+      addAssistantMessage("On it! Building it now on DAILY AI's local engine. I'll check it before handing it over.");
+      void runBuild();
+      return;
+    }
+
     setIsSubmitted(true);
     setMessages((previous) => [
       ...previous,
@@ -386,13 +452,33 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
               </div>
             ) : null}
 
-            {currentAnalysis ? (
+            {view === "deliverable" && fulfillment.status !== "idle" ? (
+              <DeliverablePanel
+                status={fulfillment.status}
+                stage={fulfillment.stage}
+                deliverable={fulfillment.deliverable}
+                error={fulfillment.error}
+                onRevise={handleRevise}
+                onRetry={() => void runBuild(lastRunRef.current?.feedback)}
+                onBackToPlan={() => setView("plan")}
+              />
+            ) : currentAnalysis ? (
               <StructuredPlan
                 requirement={currentAnalysis}
                 selectedRouteId={selectedRouteId}
                 onSelectRoute={setSelectedRouteId}
                 footer={
-                  isSubmitted ? (
+                  currentAnalysis.fulfillmentMethod === "ai_direct" &&
+                  fulfillment.status !== "idle" ? (
+                    <button
+                      type="button"
+                      onClick={() => setView("deliverable")}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-signal px-6 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-[#e0ff6b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+                    >
+                      {fulfillment.status === "working" ? "View progress" : "View result"}
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  ) : isSubmitted ? (
                     <div className="rounded-2xl border border-mint/35 bg-mint/[0.07] p-5 text-center">
                       <CheckCircle2
                         className="mx-auto h-7 w-7 text-mint"
@@ -413,7 +499,9 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
                       onClick={handleApprovePlan}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-signal px-6 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-[#e0ff6b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
                     >
-                      Approve plan and start fulfilment
+                      {currentAnalysis.fulfillmentMethod === "ai_direct"
+                        ? "Approve and build it"
+                        : "Approve plan and start fulfilment"}
                       <ArrowRight className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )
@@ -448,7 +536,11 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
               type="text"
               value={inputVal}
               onChange={(event) => setInputVal(event.target.value)}
-              placeholder="Add detail, answer a question, or ask something else..."
+              placeholder={
+                view === "deliverable" && fulfillment.deliverable
+                  ? "Ask for changes to the result..."
+                  : "Add detail, answer a question, or ask something else..."
+              }
               className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-paper outline-none transition-colors placeholder:text-mute-dim focus:border-signal/50"
             />
             {messages.length > 1 ? (
@@ -458,6 +550,8 @@ export function RequestModal({ isOpen, onClose, initialPrompt }: RequestModalPro
                   setMessages([welcomeMessage()]);
                   setCurrentAnalysis(null);
                   setIsSubmitted(false);
+                  fulfillment.reset();
+                  setView("plan");
                   setError(null);
                 }}
                 aria-label="Start a new request"
