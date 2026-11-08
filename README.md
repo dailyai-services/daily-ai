@@ -125,3 +125,10 @@ These are application-level guardrails, not a guarantee that third-party service
 - **GitHub:** https://github.com/dailyai-services/daily-ai
 - **Owner:** DAILY AI
 - **Primary stack:** Next.js · React · TypeScript · Tailwind CSS
+
+
+## Website development enquiries
+
+DAILY AI also welcomes enquiries for practical website-development work. We first understand the required pages, features, timeline and constraints, then confirm feasibility and provide a scoped proposal.
+
+[Read about website development and tell us what you need](./WEBSITE-DEVELOPMENT.md).
