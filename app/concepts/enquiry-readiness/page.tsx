@@ -1,5 +1,3 @@
-"use client";
-
 import { ArrowUpRight, Check, Clock3, MapPin, Phone, Sparkles } from "lucide-react";
 
 const services = [
