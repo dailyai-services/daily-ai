@@ -43,7 +43,7 @@ export default function EnquiryReadinessConcept() {
         Concept demo · Fictional business · Not client work
       </div>
 
-      <header className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-5 sm:px-8 lg:px-12">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-6 px-5 py-5 sm:px-8 lg:flex-nowrap lg:px-12">
         <a href="#main" className="group inline-flex items-center gap-3" aria-label="Cedar and Stone home">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#344238] text-[#f4f1eb]">
             <span className="font-serif text-2xl leading-none">c</span>
@@ -54,7 +54,7 @@ export default function EnquiryReadinessConcept() {
           </span>
         </a>
 
-        <nav aria-label="Main navigation" className="hidden items-center gap-8 text-sm text-[#555b51] md:flex">
+        <nav aria-label="Main navigation" className="order-3 flex w-full items-center justify-center gap-6 text-xs text-[#555b51] md:order-none md:w-auto md:gap-8 md:text-sm">
           <a className="transition hover:text-[#20231f]" href="#services">Services</a>
           <a className="transition hover:text-[#20231f]" href="#approach">Our approach</a>
           <a className="transition hover:text-[#20231f]" href="#contact">Contact</a>
